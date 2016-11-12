@@ -4,6 +4,8 @@ import os, sys
 import time
 import cv2
 
+from util import *
+
 class Type:
     empty = 0
     food = 1
@@ -40,31 +42,44 @@ class State:
     def __str__(self):
         return str(self.head) + ' ' + directions[self.dir]
 
-def generate_location(w, h):
-    x = np.random.random_integers(w)-1
-    y = np.random.random_integers(h)-1
-    return (x, y)
+def generate_location(x_range, y_range, arr = None):
+    x = np.random.random_integers(x_range[1]) - 1 + x_range[0]
+    y = np.random.random_integers(y_range[1]) - 1 + y_range[0]
+    pt = (x, y)
+    if arr is None:
+        return pt
+    if pt in arr:
+        return generate_location(x_range, y_range, arr)
+    else:
+        return (x, y)
 
 def clip_position(pt, x_range, y_range):
     x, y = pt
-    x = max(x, x_range[0])
-    x = min(x, x_range[1])
-    y = max(y, y_range[0])
-    y = min(y, y_range[1])
-
+    # x = max(x, x_range[0])
+    # x = min(x, x_range[1])
+    # y = max(y, y_range[0])
+    # y = min(y, y_range[1])
+    x = x % ( x_range[1] + 1 )
+    y = y % ( y_range[1] + 1 )
     return (x, y)
 
+DIM = 5
+MUL_FACTOR = 40
+
+class Params():
+    pass
+
 class Environment:
-    def __init__(self):
+    def __init__(self, test = False):
         # Initialize the environment
-        self.width = 10
-        self.height = 10
-        self.config = np.zeros((self.height, self.width)) + Type.empty
+        self.width = DIM
+        self.height = DIM
+        self.config = np.zeros((self.height, self.width), dtype = np.uint8) + Type.empty
 
-        self.x_range = (0, self.width - 1)
-        self.y_range = (0, self.height - 1)
+        self.x_range = np.array([0, self.width - 1])
+        self.y_range = np.array([0, self.height - 1])
 
-        self.win = False
+        self.test = test
 
         self.delta_pos_head = np.array([
             [
@@ -96,11 +111,15 @@ class Environment:
             ]
         ])
 
+        self.rewards = Params()
+        self.rewards.win = 10
+        self.rewards.live = 0
+
     def init(self):
         self.generate_food()
 
         # Generate a random (x, y) - snake_head
-        snake_head = generate_location(self.width, self.height)
+        snake_head = generate_location(self.x_range, self.y_range, [self.food])
         snake_dir = Directions.random()
         self.config[snake_head] = Type.snake
 
@@ -116,28 +135,34 @@ class Environment:
 
     def get_reward(self, state):
         head = state.head
+        # print 121, self.config[head]
         if self.config[head] == Type.empty:
-            return 0
+            return self.rewards.live
         elif self.config[head] == Type.food:
-            return 10
+            return self.rewards.win
+        else:
+            return self.rewards.live
 
     def update_config(self, state, next_state):
         head = state.head
         next_head = next_state.head
         self.config[head] = Type.empty
         if self.config[next_head] == Type.food:
-            self.generate_food()
+            self.generate_food([next_head])
         self.config[next_head] = Type.snake
 
-    def generate_food(self):
+    def generate_food(self, arr = None):
         # Generate a random (x, y) - food
-        self.food = generate_location(self.width, self.height)
+        x_range = self.x_range + [1, -1]
+        y_range = self.y_range + [1, -1]
+
+        self.food = generate_location(x_range, y_range, arr)
         self.config[self.food] = Type.food
 
     def submit_action(self, state, action):
-        # state.head --> snake's position
-        # state.dir --> snake's direction
-        # action --> action that is taken
+        # state.head    -->     snake's position
+        # state.dir     -->     snake's direction
+        # action        -->     action that is taken
 
         del_head = self.delta_pos_head[(state.dir, action)]
         head = clip_position(state.head + del_head, self.x_range, self.y_range)
@@ -155,8 +180,7 @@ class Environment:
         return next_state, reward
 
     def visualise(self):
-        self.win = True
-        mul = 10
+        mul = MUL_FACTOR
         shape_ = self.config.shape
         shape = tuple(np.array(list(shape_))*mul)
         img = np.zeros(shape)
@@ -175,34 +199,77 @@ class Agent:
         self.env = Environment()
         self.state = self.env.init()
 
-        self.FEATURE_LENGTH = 6
+        self.params = Params()
+        self.params.alpha = 0.5
+        self.params.discount = 0.9
 
-    def log(self):
-        print self.state, actions[action], reward, next_state
+        self.initQ()
 
     def extract_features(self, state):
-        return np.array(np.sign(np.array(state.head) + np.array(state.food)).tolist() + [state.dir])
+        ret = (np.sign(np.array(state.head) - np.array(state.food)).tolist() + [state.dir])
+        # print ret
+        return tuple(ret)
 
-    def init_weights(self):
+    def initQ(self):
         self.Q = Counter()
-        self.weights = np.random.random(self.FEATURE_LENGTH)
 
-    def update_weights(self):
+    def updateQ(self, state, action, reward, next_state):
+        Q_ns = [ self.Q[(next_state, a)] for a in range(len(actions)) ]
+        print reward, self.params.discount, Q_ns
+        t1 = self.Q[(state, action)]
+        t2 = reward + self.params.discount*(np.max(Q_ns))
 
+        self.Q[(state, action)] = (1 - self.params.alpha)*t1 + self.params.alpha*t2
 
     def learn(self):
-        for i in range(100):
+        for i in range(1000):
             action = Actions.random()
             next_state, reward = self.env.submit_action(self.state, action)
 
-            self.log()
+            # Logging stats
+            print self.state, actions[action], reward, next_state
 
             # Train the RL agent
+            f_state = self.extract_features(self.state)
+            f_next_state = self.extract_features(next_state)
+            print f_state, f_next_state
+            self.updateQ(f_state, action, reward, f_next_state)
 
             self.env.visualise()
             self.state = next_state
 
-            time.sleep(0.1)
+            # time.sleep(0.1)
+
+    def predict(self, state):
+        Q_s = [ self.Q[(state, a)] for a in range(len(actions)) ]
+        action = np.argmax(Q_s)
+        return action
+
+    def run(self):
+        self.env = Environment(test = True)
+        self.state = self.env.init()
+
+        self.env.visualise()
+
+        while True:
+            f_state = self.extract_features(self.state)
+            action = self.predict(f_state)
+            next_state, reward = self.env.submit_action(self.state, action)
+
+            if reward == self.env.rewards.win:
+                print 'Agent won'
+                break
+
+            self.env.visualise()
+            time.sleep(1)
+
+            self.state = next_state
 
 agent = Agent()
 agent.learn()
+
+again = (raw_input('Continue ( Y/N ) ?').lower() == 'y')
+
+while again:
+    agent.run()
+    again = (raw_input('Continue ( Y/N ) ?').lower() == 'y')
