@@ -1,3 +1,115 @@
+import numpy as np
+
+import os, time
+import cv2
+import cPickle as pickle
+
+"""
+Consists of utility functions for learning/testing the RL agent.
+"""
+
+def generate_location(x_range, y_range, arr = None):
+    """
+    Generates location such that x is in the range [x_range[0], x_range[1]] --> both inclusive
+    and y is in the range [y_range[0], y_range[1]] --> both inclusive
+    at random.
+
+    Also, it doesn't generate a point specified in arr.
+    """
+    x = np.random.random_integers(x_range[1]) - 1 + x_range[0]
+    y = np.random.random_integers(y_range[1]) - 1 + y_range[0]
+    pt = (x, y)
+
+    if arr is None:
+        return pt
+
+    if pt in arr:
+        return generate_location(x_range, y_range, arr)
+    else:
+        return (x, y)
+
+def clip_position(pt, x_range, y_range):
+    """
+    Utility function to clip the position and avoid overflows.
+    """
+    x, y = pt
+    x = x % ( x_range[1] + 1 )
+    y = y % ( y_range[1] + 1 )
+    return (x, y)
+
+class Type:
+    """
+    Mentions the type of the square/tile in the board. Currently 4 types are supported.
+    """
+    empty = 0
+    food = 1
+    wall = 2
+    snake = 3
+
+class Params():
+    """
+    A utility container for parameter storage. Similar to a dictionary, but easy to access
+    with a '.' operator.
+    """
+    pass
+
+class State:
+    """
+    A utility container for "state" storage.
+    """
+    def __str__(self):
+        directions = Direction.all()
+        return str(self.head) + ' ' + directions[self.dir]
+
+class Action:
+    """
+    A static class enclosing Enumerated actions.
+    """
+    left = 0
+    right = 1
+    straight = 2
+
+    @classmethod
+    def random(self):
+        """
+        Returns a randomly chosen action.
+        """
+        members = [attr for attr in dir(Action) if not callable(getattr(Action, attr)) and not attr.startswith("__")]
+        return np.random.random_integers(len(members)) - 1
+
+    @classmethod
+    def all(self):
+        """
+        Returns all the available actions.
+        """
+        members = [attr for attr in dir(Action) if not callable(getattr(Action, attr)) and not attr.startswith("__")]
+        return members
+
+class Direction:
+    """
+    A static class enclosing Enumerated directions.
+    """
+    left = 0
+    right = 1
+    up = 2
+    down = 3
+
+    @classmethod
+    def random(self):
+        """
+        Returns a randomly chosen direction.
+        """
+        members = [attr for attr in dir(Direction) if not callable(getattr(Direction, attr)) and not attr.startswith("__")]
+        return np.random.random_integers(len(members)) - 1
+
+    @classmethod
+    def all(self):
+        """
+        Returns all the possible directions of movement.
+        """
+        members = [attr for attr in dir(Direction) if not callable(getattr(Direction, attr)) and not attr.startswith("__")]
+        return members
+
 class Counter(dict):
     """
     A counter keeps track of counts for a set of keys.
