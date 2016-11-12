@@ -17,30 +17,38 @@ class Actions:
     left = 0
     right = 1
     straight = 2
-    __length__ = 3
 
     @classmethod
     def random(self):
-        return np.random.random_integers(self.__length__) - 1
+        members = [attr for attr in dir(Actions) if not callable(getattr(Actions, attr)) and not attr.startswith("__")]
+        return np.random.random_integers(len(members)) - 1
+
+    @classmethod
+    def all(self):
+        members = [attr for attr in dir(Actions) if not callable(getattr(Actions, attr)) and not attr.startswith("__")]
+        return members
 
 class Directions:
     left = 0
     right = 1
     up = 2
     down = 3
-    __length__ = 4
 
     @classmethod
     def random(self):
-        return np.random.random_integers(self.__length__) - 1
+        members = [attr for attr in dir(Directions) if not callable(getattr(Directions, attr)) and not attr.startswith("__")]
+        return np.random.random_integers(len(members)) - 1
 
-directions = ['left', 'right', 'up', 'down']
-actions = ['left', 'right', 'straight']
-# colors = [(0, 0, 0), (255, 255, 0), (0, 255, 255), (255, 255, 255)]
-colors = [0, 127, 127, 255]
+    @classmethod
+    def all(self):
+        members = [attr for attr in dir(Directions) if not callable(getattr(Directions, attr)) and not attr.startswith("__")]
+        return members
+
+colors = [(0, 0, 0), (100, 255, 100), (255, 255, 255), (0, 0, 255)]
 
 class State:
     def __str__(self):
+        directions = Directions.all()
         return str(self.head) + ' ' + directions[self.dir]
 
 def generate_location(x_range, y_range, arr = None):
@@ -186,13 +194,16 @@ class Environment:
 
     def visualise(self):
         mul = MUL_FACTOR
+        # No. of channels
+        ch = 3
+
         shape_ = self.config.shape
-        shape = tuple(np.array(list(shape_))*mul)
+        shape = (shape_[0]*mul, shape_[1]*mul, ch)
         img = np.zeros(shape)
 
         for j in range(0, shape_[0]):
             for i in range(0, shape_[1]):
-                img[i*mul:(i+1)*mul, j*mul:(j+1)*mul] = np.zeros((mul, mul)) + colors[int(self.config[i, j])]
+                img[i*mul:(i+1)*mul, j*mul:(j+1)*mul, :] = np.zeros((mul, mul, ch)) + colors[int(self.config[i, j])]
 
         # print img
         img = np.uint8(img)
@@ -223,6 +234,7 @@ class Agent:
             self.Q = Counter(self.load_model(input))
 
     def updateQ(self, state, action, reward, next_state):
+        actions = Actions.all()
         Q_ns = [ self.Q[(next_state, a)] for a in range(len(actions)) ]
         # print reward, self.params.discount, Q_ns
         t1 = self.Q[(state, action)]
@@ -231,6 +243,7 @@ class Agent:
         self.Q[(state, action)] = (1 - self.params.alpha)*t1 + self.params.alpha*t2
 
     def learn(self):
+        actions = Actions.all()
         for i in range(self.params.iter):
             action = Actions.random()
             next_state, reward = self.env.submit_action(self.state, action)
@@ -249,6 +262,7 @@ class Agent:
             # time.sleep(0.1)
 
     def predict(self, state):
+        actions = Actions.all()
         Q_s = [ self.Q[(state, a)] for a in range(len(actions)) ]
         action = np.argmax(Q_s)
         return action
@@ -263,10 +277,11 @@ class Agent:
             next_state, reward = self.env.submit_action(self.state, action)
 
             if reward == self.env.rewards.win:
-                print 'Agent won'
+                print 'Agent won!'
                 break
 
-            time.sleep(0.5)
+            # Delaying the simulation
+            time.sleep(0.3)
 
             self.state = next_state
 
