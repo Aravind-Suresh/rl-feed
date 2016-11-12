@@ -56,22 +56,18 @@ def generate_location(x_range, y_range, arr = None):
 
 def clip_position(pt, x_range, y_range):
     x, y = pt
-    # x = max(x, x_range[0])
-    # x = min(x, x_range[1])
-    # y = max(y, y_range[0])
-    # y = min(y, y_range[1])
     x = x % ( x_range[1] + 1 )
     y = y % ( y_range[1] + 1 )
     return (x, y)
 
 DIM = 5
-MUL_FACTOR = 40
+MUL_FACTOR = 50
 
 class Params():
     pass
 
 class Environment:
-    def __init__(self, test = False):
+    def __init__(self, test = False, visualise = True):
         # Initialize the environment
         self.width = DIM
         self.height = DIM
@@ -116,6 +112,8 @@ class Environment:
         self.rewards.win = 10
         self.rewards.live = 0
 
+        self.show_visualisation = visualise
+
     def init(self):
         self.generate_food()
 
@@ -148,9 +146,15 @@ class Environment:
         head = state.head
         next_head = next_state.head
         self.config[head] = Type.empty
-        if self.config[next_head] == Type.food:
-            self.generate_food([next_head])
+
+        prev_type = self.config[next_head]
         self.config[next_head] = Type.snake
+
+        if self.show_visualisation:
+            self.visualise()
+
+        if prev_type == Type.food:
+            self.generate_food([next_head])
 
     def generate_food(self, arr = None):
         # Generate a random (x, y) - food
@@ -192,38 +196,42 @@ class Environment:
 
         # print img
         img = np.uint8(img)
-        cv2.imshow("win", img)
+        cv2.imshow("Fabber", img)
         cv2.waitKey(1)
 
 class Agent:
-    def __init__(self):
+    def __init__(self, input = None):
         self.env = Environment()
         self.state = self.env.init()
 
         self.params = Params()
         self.params.alpha = 0.5
         self.params.discount = 0.9
+        self.params.iter = 10000
 
-        self.initQ()
+        self.initQ(input)
 
     def extract_features(self, state):
         ret = (np.sign(np.array(state.head) - np.array(state.food)).tolist() + [state.dir])
         # print ret
         return tuple(ret)
 
-    def initQ(self):
-        self.Q = Counter()
+    def initQ(self, input = None):
+        if input is None:
+            self.Q = Counter()
+        else:
+            self.Q = Counter(self.load_model(input))
 
     def updateQ(self, state, action, reward, next_state):
         Q_ns = [ self.Q[(next_state, a)] for a in range(len(actions)) ]
-        print reward, self.params.discount, Q_ns
+        # print reward, self.params.discount, Q_ns
         t1 = self.Q[(state, action)]
         t2 = reward + self.params.discount*(np.max(Q_ns))
 
         self.Q[(state, action)] = (1 - self.params.alpha)*t1 + self.params.alpha*t2
 
     def learn(self):
-        for i in range(10000):
+        for i in range(self.params.iter):
             action = Actions.random()
             next_state, reward = self.env.submit_action(self.state, action)
 
@@ -233,10 +241,9 @@ class Agent:
             # Train the RL agent
             f_state = self.extract_features(self.state)
             f_next_state = self.extract_features(next_state)
-            print f_state, f_next_state
+            # print f_state, f_next_state
             self.updateQ(f_state, action, reward, f_next_state)
 
-            self.env.visualise()
             self.state = next_state
 
             # time.sleep(0.1)
@@ -250,8 +257,6 @@ class Agent:
         self.env = Environment(test = True)
         self.state = self.env.init()
 
-        self.env.visualise()
-
         while True:
             f_state = self.extract_features(self.state)
             action = self.predict(f_state)
@@ -261,7 +266,6 @@ class Agent:
                 print 'Agent won'
                 break
 
-            self.env.visualise()
             time.sleep(0.5)
 
             self.state = next_state
@@ -275,8 +279,8 @@ class Agent:
             return pickle.load(f)
 
 def main(args):
-    agent = Agent()
     if args.learn:
+        agent = Agent()
         agent.learn()
         if args.output is not None:
             agent.dump_model(args.output)
@@ -286,15 +290,17 @@ def main(args):
             print 'Aborting..'
             sys.exit()
         else:
-            agent.load_model(args.input)
+            agent = Agent(args.input)
 
     # Learned agent available
 
     if args.test:
-        again = True
-        while again:
+        print 'Press any key to run agent on another environment, <Esc> to abort.'
+        while True:
             agent.run()
-            again = (raw_input('Continue ( Y/N ) ? ').lower() == 'y')
+            k = cv2.waitKey(0)
+            if (k & 0xFF) == 27:
+                break
 
     print 'Done'
 
@@ -307,5 +313,4 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', help='Input file path for the stored model')
 
     args = parser.parse_args()
-
     main(args)
