@@ -1,7 +1,6 @@
 import numpy as np
 import os, sys
 
-import matplotlib.pyplot as plt
 import time
 import cv2
 
@@ -47,10 +46,11 @@ def generate_location(w, h):
     return (x, y)
 
 def clip_position(pt, x_range, y_range):
-    x = max(pt[0], x_range[0])
-    x = min(pt[0], x_range[1])
-    y = max(pt[1], y_range[0])
-    y = min(pt[1], y_range[1])
+    x, y = pt
+    x = max(x, x_range[0])
+    x = min(x, x_range[1])
+    y = max(y, y_range[0])
+    y = min(y, y_range[1])
 
     return (x, y)
 
@@ -81,7 +81,20 @@ class Environment:
             ]
         ])
 
-        plt.ion()
+        self.next_direction = np.array([
+            [
+                Directions.down, Directions.up, Directions.left
+            ],
+            [
+                Directions.up, Directions.down, Directions.right
+            ],
+            [
+                Directions.left, Directions.right, Directions.up
+            ],
+            [
+                Directions.right, Directions.left, Directions.down
+            ]
+        ])
 
     def init(self):
         self.generate_food()
@@ -97,6 +110,7 @@ class Environment:
         init_state = State()
         init_state.head = snake_head
         init_state.dir = snake_dir
+        init_state.food = self.food
 
         return init_state
 
@@ -124,16 +138,19 @@ class Environment:
         # state.head --> snake's position
         # state.dir --> snake's direction
         # action --> action that is taken
+
         del_head = self.delta_pos_head[(state.dir, action)]
         head = clip_position(state.head + del_head, self.x_range, self.y_range)
-        print head
+        # print del_head, state.head, head
 
         next_state = State()
         next_state.head = head
-        next_state.dir = action
+        next_state.dir = self.next_direction[(state.dir, action)]
 
         reward = self.get_reward(next_state)
         self.update_config(state, next_state)
+
+        next_state.food = self.food
 
         return next_state, reward
 
@@ -144,8 +161,8 @@ class Environment:
         shape = tuple(np.array(list(shape_))*mul)
         img = np.zeros(shape)
 
-        for i in range(0, shape_[0]):
-            for j in range(0, shape_[1]):
+        for j in range(0, shape_[0]):
+            for i in range(0, shape_[1]):
                 img[i*mul:(i+1)*mul, j*mul:(j+1)*mul] = np.zeros((mul, mul)) + colors[int(self.config[i, j])]
 
         # print img
@@ -158,12 +175,29 @@ class Agent:
         self.env = Environment()
         self.state = self.env.init()
 
+        self.FEATURE_LENGTH = 6
+
+    def log(self):
+        print self.state, actions[action], reward, next_state
+
+    def extract_features(self, state):
+        return np.array(np.sign(np.array(state.head) + np.array(state.food)).tolist() + [state.dir])
+
+    def init_weights(self):
+        self.Q = Counter()
+        self.weights = np.random.random(self.FEATURE_LENGTH)
+
+    def update_weights(self):
+
+
     def learn(self):
         for i in range(100):
             action = Actions.random()
             next_state, reward = self.env.submit_action(self.state, action)
 
-            print self.state, actions[action], reward, next_state
+            self.log()
+
+            # Train the RL agent
 
             self.env.visualise()
             self.state = next_state
