@@ -1,10 +1,9 @@
 import numpy as np
 import os, sys
 
-def generate_location(w, h):
-    x = np.random.random_integers(w)-1
-    y = np.random.random_integers(h)-1
-    return (x, y)
+import matplotlib.pyplot as plt
+import time
+import cv2
 
 class Type:
     empty = 0
@@ -18,12 +17,34 @@ class Actions:
     straight = 2
     __length__ = 3
 
+    @classmethod
+    def random(self):
+        return np.random.random_integers(self.__length__) - 1
+
 class Directions:
     left = 0
     right = 1
     up = 2
     down = 3
     __length__ = 4
+
+    @classmethod
+    def random(self):
+        return np.random.random_integers(self.__length__) - 1
+
+directions = ['left', 'right', 'up', 'down']
+actions = ['left', 'right', 'straight']
+# colors = [(0, 0, 0), (255, 255, 0), (0, 255, 255), (255, 255, 255)]
+colors = [0, 127, 127, 255]
+
+class State:
+    def __str__(self):
+        return str(self.head) + ' ' + directions[self.dir]
+
+def generate_location(w, h):
+    x = np.random.random_integers(w)-1
+    y = np.random.random_integers(h)-1
+    return (x, y)
 
 def clip_position(pt, x_range, y_range):
     x = max(pt[0], x_range[0])
@@ -36,21 +57,16 @@ def clip_position(pt, x_range, y_range):
 class Environment:
     def __init__(self):
         # Initialize the environment
-        self.width = 100
-        self.height = 100
+        self.width = 10
+        self.height = 10
         self.config = np.zeros((self.height, self.width)) + Type.empty
 
-        self.x_range = (0, self.width)
-        self.y_range = (0, self.height)
+        self.x_range = (0, self.width - 1)
+        self.y_range = (0, self.height - 1)
 
-        self.generate_food()
+        self.win = False
 
-        # Generate a random (x, y) - snake_head
-        self.snake_head = generate_location(self.width, self.height)
-        self.snake_dir = Directions.random()
-        self.config[self.snake_head] = Type.snake
-
-        self.delta_pos_head = [
+        self.delta_pos_head = np.array([
             [
                 [0, +1], [0, -1], [-1, 0]
             ],
@@ -63,10 +79,26 @@ class Environment:
             [
                 [+1, 0], [-1, 0], [0, +1]
             ]
-        ]
+        ])
+
+        plt.ion()
+
+    def init(self):
+        self.generate_food()
+
+        # Generate a random (x, y) - snake_head
+        snake_head = generate_location(self.width, self.height)
+        snake_dir = Directions.random()
+        self.config[snake_head] = Type.snake
 
         # No walls for now
         # Also, snake occupies one square and doesn't grow
+
+        init_state = State()
+        init_state.head = snake_head
+        init_state.dir = snake_dir
+
+        return init_state
 
     def get_reward(self, state):
         head = state.head
@@ -81,7 +113,7 @@ class Environment:
         self.config[head] = Type.empty
         if self.config[next_head] == Type.food:
             self.generate_food()
-        self.config[next_head] = Type.empty
+        self.config[next_head] = Type.snake
 
     def generate_food(self):
         # Generate a random (x, y) - food
@@ -94,19 +126,49 @@ class Environment:
         # action --> action that is taken
         del_head = self.delta_pos_head[(state.dir, action)]
         head = clip_position(state.head + del_head, self.x_range, self.y_range)
+        print head
 
         next_state = State()
         next_state.head = head
         next_state.dir = action
 
         reward = self.get_reward(next_state)
-        update_config(state, next_state)
+        self.update_config(state, next_state)
 
         return next_state, reward
 
-def State():
-    pass
+    def visualise(self):
+        self.win = True
+        mul = 10
+        shape_ = self.config.shape
+        shape = tuple(np.array(list(shape_))*mul)
+        img = np.zeros(shape)
 
-def Agent():)
-    def __init__():
-        env = Environment()
+        for i in range(0, shape_[0]):
+            for j in range(0, shape_[1]):
+                img[i*mul:(i+1)*mul, j*mul:(j+1)*mul] = np.zeros((mul, mul)) + colors[int(self.config[i, j])]
+
+        # print img
+        img = np.uint8(img)
+        cv2.imshow("win", img)
+        cv2.waitKey(1)
+
+class Agent:
+    def __init__(self):
+        self.env = Environment()
+        self.state = self.env.init()
+
+    def learn(self):
+        for i in range(100):
+            action = Actions.random()
+            next_state, reward = self.env.submit_action(self.state, action)
+
+            print self.state, actions[action], reward, next_state
+
+            self.env.visualise()
+            self.state = next_state
+
+            time.sleep(0.1)
+
+agent = Agent()
+agent.learn()
