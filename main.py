@@ -1,8 +1,9 @@
 import numpy as np
-import os, sys
+import os, sys, argparse
 
 import time
 import cv2
+import cPickle as pickle
 
 from util import *
 
@@ -222,7 +223,7 @@ class Agent:
         self.Q[(state, action)] = (1 - self.params.alpha)*t1 + self.params.alpha*t2
 
     def learn(self):
-        for i in range(1000):
+        for i in range(10000):
             action = Actions.random()
             next_state, reward = self.env.submit_action(self.state, action)
 
@@ -261,15 +262,50 @@ class Agent:
                 break
 
             self.env.visualise()
-            time.sleep(1)
+            time.sleep(0.5)
 
             self.state = next_state
 
-agent = Agent()
-agent.learn()
+    def dump_model(self, out_dir):
+        with open(out_dir + os.sep + 'model.pkl', 'wb') as f:
+            pickle.dump(self.Q, f, pickle.HIGHEST_PROTOCOL)
 
-again = (raw_input('Continue ( Y/N ) ?').lower() == 'y')
+    def load_model(self, input_path):
+        with open(input_path, 'rb') as f:
+            return pickle.load(f)
 
-while again:
-    agent.run()
-    again = (raw_input('Continue ( Y/N ) ?').lower() == 'y')
+def main(args):
+    agent = Agent()
+    if args.learn:
+        agent.learn()
+        if args.output is not None:
+            agent.dump_model(args.output)
+    else:
+        if args.input is None:
+            print 'Input model to be provided if agent should not be learned'
+            print 'Aborting..'
+            sys.exit()
+        else:
+            agent.load_model(args.input)
+
+    # Learned agent available
+
+    if args.test:
+        again = True
+        while again:
+            agent.run()
+            again = (raw_input('Continue ( Y/N ) ? ').lower() == 'y')
+
+    print 'Done'
+
+if __name__ == '__main__':
+    # Parsing command-line args
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--learn', help='Learn the RL agent', action = 'store_true')
+    parser.add_argument('-t', '--test', help='Test the RL agent on random environments', action = 'store_true')
+    parser.add_argument('-o', '--output', help='Output directory for storing trained model')
+    parser.add_argument('-i', '--input', help='Input file path for the stored model')
+
+    args = parser.parse_args()
+
+    main(args)
